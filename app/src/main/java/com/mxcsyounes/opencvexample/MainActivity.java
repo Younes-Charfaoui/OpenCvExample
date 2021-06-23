@@ -8,8 +8,6 @@ import android.graphics.Matrix;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
-import android.view.Window;
-import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -23,9 +21,9 @@ import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
-import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 
@@ -39,6 +37,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     private final Matrix mMatrix = new Matrix();
     CascadeClassifier faceDetector;
     File casFile;
+    private final float mRelativeFaceSize = 0.2f;
+    private int mAbsoluteFaceSize = 0;
     private Mat mRgba, mGrey;
     private CameraBridgeViewBase cameraView;
     private final BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -100,7 +100,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     }
 
     private void selectCameraFromMode() {
-        Log.d(TAG, "selectCameraFromMode: called with " +isCameraBackMode);
+        Log.d(TAG, "selectCameraFromMode: called with " + isCameraBackMode);
         cameraView.disableView();
         if (isCameraBackMode)
             cameraView.setCameraIndex(JavaCameraView.CAMERA_ID_BACK);
@@ -128,6 +128,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     }
 
     private void checkPermissions() {
+        Log.d(TAG, "checkPermissions");
         if (isPermissionGranted())
             loadCameraBridge();
         else
@@ -139,15 +140,17 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     }
 
     private void loadCameraBridge() {
+        Log.d(TAG, "permission is granted");
         cameraView.setVisibility(SurfaceView.VISIBLE);
         selectCameraFromMode();
-        cameraView.setMaxFrameSize(500, 500);
+        //cameraView.setMaxFrameSize(500, 500);
         cameraView.setCvCameraViewListener(this);
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        Log.d(TAG, "onRequestPermissionsResult: permission is granted");
         checkPermissions();
     }
 
@@ -157,15 +160,23 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
 
     public void onCameraViewStopped() {
         mRgba.release();
+        mGrey.release();
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
         mRgba = inputFrame.rgba();
+        mGrey = inputFrame.gray();
+
+        if (mAbsoluteFaceSize == 0) {
+            int height = mGrey.rows();
+            if (Math.round(height * mRelativeFaceSize) > 0)
+                mAbsoluteFaceSize = Math.round(height * mRelativeFaceSize);
+        }
 
         MatOfRect faceDetections = new MatOfRect();
-        faceDetector.detectMultiScale(mRgba, faceDetections);
+        faceDetector.detectMultiScale(mGrey, faceDetections, 1.1, 2, 2, new Size(mAbsoluteFaceSize, mAbsoluteFaceSize), new Size());
         for (Rect rect : faceDetections.toArray())
-            Imgproc.rectangle(mRgba, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(255, 0, 0));
+            Imgproc.rectangle(mRgba, rect.tl(), rect.br(), new Scalar(0, 255, 0, 255), 2);
 
         return mRgba;
     }
